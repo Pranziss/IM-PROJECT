@@ -87,11 +87,13 @@ export function createApi({
                 );
             }
             if (!response.ok || data?.success !== true) {
-                const reservationCode =
+                const reservationWrite =
                     method !== "GET" &&
                     /^\/reservations(?:$|\/\d+\/(?:approve|reject|cancel)$)/.test(
                         path,
-                    ) &&
+                    );
+                const reservationCode =
+                    reservationWrite &&
                     response.status === 409 &&
                     [
                         "RESERVATION_SCHEDULE_CONFLICT",
@@ -150,9 +152,11 @@ export function createApi({
                 }
                 throw new ApiError(
                     response.status,
-                    reservationCode === "RESERVATION_CONFLICT"
-                        ? "The transaction conflicted or its outcome needs verification. Refresh and check your request history before resubmitting."
-                        : message,
+                    response.status >= 500 && reservationWrite
+                        ? "The server couldn't confirm this reservation action. Refresh Reservations and check whether it went through before trying again. Contact your administrator if the error continues."
+                        : reservationCode === "RESERVATION_CONFLICT"
+                          ? "The transaction conflicted or its outcome needs verification. Refresh and check your request history before resubmitting."
+                          : message,
                     method !== "GET" &&
                         (response.status === 409 || response.status >= 500) &&
                         reservationCode !== "RESERVATION_SCHEDULE_CONFLICT",

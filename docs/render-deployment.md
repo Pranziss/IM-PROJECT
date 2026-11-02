@@ -110,6 +110,18 @@ After your service and database are up, initialize the database schema and popul
     npm run db:check
     ```
 
+> [!WARNING]
+> These commands do **not** install the reservation workflow. `prisma db push`
+> synchronizes Prisma-managed schema only; it does not execute SQL migrations.
+> `POST /api/reservations` calls `im101_private.create_reservation`, which is
+> defined in `20261026020000_reservation_create`. If that procedure is absent,
+> reservation submissions fail with HTTP 500. The reservation migrations are
+> currently provisional/offline artifacts and require dedicated PostgreSQL role
+> provisioning, operator review, and separate authorization before deployment.
+> Do not run `prisma migrate deploy` against a hosted database as a workaround.
+> See [the reservation workflow](./reservation-workflow.md) and
+> [release readiness](./application-release-readiness.md) for the deployment gates.
+
 ---
 
 ## Verifying Deployment
