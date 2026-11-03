@@ -29,9 +29,21 @@ export function createApi({
             token = value;
             generation++;
         },
+        // Swaps in a refreshed token for the same user without cancelling
+        // requests that are already in flight.
+        renewToken(value) {
+            token = value;
+        },
         async request(
             path,
-            { method = "GET", body, signal, publicRequest = false } = {},
+            {
+                method = "GET",
+                body,
+                signal,
+                publicRequest = false,
+                // Only the auth endpoints send the httpOnly refresh cookie.
+                withCredentials = false,
+            } = {},
         ) {
             const version = generation;
             let response;
@@ -47,7 +59,7 @@ export function createApi({
                                   ])
                                 : AbortSignal.timeout(20000)
                             : signal,
-                    credentials: "omit",
+                    credentials: withCredentials ? "same-origin" : "omit",
                     redirect: "error",
                     headers: {
                         ...(body !== undefined
