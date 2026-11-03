@@ -1084,7 +1084,7 @@ function ResourcePage({
     );
 }
 export default function App() {
-    const { user, api, logout } = useSession();
+    const { user, api, logout, restoring } = useSession();
     const location = useRoute(),
         [requestedRoute, query = ""] = location.split("?");
     const route =
@@ -1093,6 +1093,12 @@ export default function App() {
             : requestedRoute;
     const [revision, setRevision] = useState(0);
     const catalogs = useCatalogs(user, api, revision);
+    if (!user && restoring)
+        return (
+            <main className="session-restore">
+                <Skeleton label="Restoring your session…" />
+            </main>
+        );
     if (!user) return <Login signup={route === "signup"} />;
     const allowed =
         (route !== "buildings" || isAdmin(user)) &&
