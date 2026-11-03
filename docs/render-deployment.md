@@ -92,20 +92,30 @@ Under the **Environment Variables** tab for your web service, add:
 
 ## Database Initialization & Seeding
 
-After your service and database are up, initialize the database schema and populate lookups/admin account:
+The application automatically handles database setup on Render. When your web service boots, `npm start` executes `scripts/seed.js` which:
 
-### Using the Render Shell
+1. Automatically verifies tables exist (and pushes the schema if needed).
+2. Deploys the required PostgreSQL schema (`im101_private`), stored procedures (`create_reservation`, `approve_reservation`, `reject_reservation`, `cancel_reservation`), and integrity/audit triggers.
+3. Upserts all default lookup values (roles, reservation statuses, facility types, equipment categories).
+4. Provisions the initial administrator account from environment variables if specified.
 
-1. In your Web Service dashboard, go to the **Shell** tab.
-2. Push the schema to the database:
+### Manual Database Operations (Render Shell)
+
+If you ever need to manually verify or re-deploy procedures from the Render **Shell** tab:
+
+1. Push schema changes (if modifying `schema.prisma`):
     ```sh
     npm run prisma:push
     ```
-3. Seed the initial roles, statuses, facility types, categories, and admin user:
+2. Re-deploy stored procedures and triggers:
+    ```sh
+    npm run db:procedures
+    ```
+3. Re-seed lookups and initial admin:
     ```sh
     npm run db:seed
     ```
-4. Verify the connection:
+4. Verify database connectivity:
     ```sh
     npm run db:check
     ```

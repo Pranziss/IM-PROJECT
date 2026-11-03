@@ -1,5 +1,9 @@
+const dns = require("node:dns");
+if (dns.setDefaultResultOrder) dns.setDefaultResultOrder("ipv4first");
+const { execSync } = require("node:child_process");
 const bcrypt = require("bcryptjs");
 const { getPrisma } = require("../src/db");
+const { deployProcedures } = require("./deploy-procedures");
 
 const roles = [
     "System Administrator",
@@ -31,6 +35,34 @@ const equipmentCategories = [
 
 async function seed() {
     const prisma = getPrisma();
+
+    // 0. Ensure schema tables exist (auto push if not yet created)
+    try {
+        await prisma.role.findFirst({ select: { roleId: true } });
+    } catch {
+        console.log(
+            "Database schema not found. Initializing schema with prisma db push...",
+        );
+        execSync(
+            "npx prisma db push --config prisma7.config.ts --skip-generate",
+            {
+                stdio: "inherit",
+                env: process.env,
+                shell: true,
+            },
+        );
+    }
+
+    // 0.1 Ensure im101_private stored procedures, functions, and triggers exist
+    try {
+        await deployProcedures();
+    } catch (procError) {
+        console.warn(
+            "Notice: Stored procedure deployment warning:",
+            procError.message || procError,
+        );
+    }
+
     console.log("Seeding database lookups...");
 
     // 1. Roles

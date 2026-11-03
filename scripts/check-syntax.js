@@ -63,6 +63,7 @@ const files = [
     "scripts/reset-admin-password.js",
     "scripts/provision-initial.js",
     "scripts/db-check.js",
+    "scripts/deploy-procedures.js",
     "scripts/seed.js",
     "scripts/check-syntax.js",
     "eslint.config.js",

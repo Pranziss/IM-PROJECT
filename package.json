@@ -8,6 +8,7 @@
         "start": "node scripts/seed.js && node src/server.js",
         "build": "npm run prisma:generate && npm --prefix client install && npm --prefix client run build",
         "db:check": "node scripts/db-check.js",
+        "db:procedures": "node scripts/deploy-procedures.js",
         "db:seed": "node scripts/seed.js",
         "prisma:deploy": "prisma migrate deploy --config prisma7.config.ts",
         "prisma:push": "prisma db push --config prisma7.config.ts",

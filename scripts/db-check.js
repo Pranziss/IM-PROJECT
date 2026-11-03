@@ -1,3 +1,6 @@
+const dns = require("node:dns");
+if (dns.setDefaultResultOrder) dns.setDefaultResultOrder("ipv4first");
+
 function reportError(error) {
     const codes = new Set();
     const seen = new Set();
