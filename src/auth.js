@@ -5,6 +5,29 @@ const { randomBytes } = require("node:crypto");
 
 const issuer = "im101-api";
 const audience = "im101-client";
+// Refresh tokens use their own audience so they can never act as access tokens.
+const refreshAudience = "im101-refresh";
+const refreshCookie = "im101_refresh";
+const refreshSeconds = 8 * 60 * 60;
+
+function cookieOptions(maxAgeSeconds) {
+    return [
+        "Path=/api/auth",
+        "HttpOnly",
+        "SameSite=Strict",
+        ...(process.env.NODE_ENV === "production" ? ["Secure"] : []),
+        `Max-Age=${maxAgeSeconds}`,
+    ].join("; ");
+}
+
+function readCookie(req, name) {
+    for (const part of (req.get("cookie") || "").split(";")) {
+        const index = part.indexOf("=");
+        if (index > 0 && part.slice(0, index).trim() === name)
+            return part.slice(index + 1).trim();
+    }
+    return null;
+}
 const profileSelect = {
     userId: true,
     fname: true,
@@ -40,6 +63,36 @@ function createAuth({ getPrisma, jwtSecret }) {
             .status(401)
             .json({ success: false, message: "Authentication required." });
 
+    const validSubject = (claims) =>
+        Number.isInteger(claims.exp) &&
+        typeof claims.sub === "string" &&
+        /^[1-9]\d*$/.test(claims.sub) &&
+        Number.isSafeInteger(Number(claims.sub)) &&
+        Number(claims.sub) <= 2147483647;
+    const accessToken = (userId) =>
+        jwt.sign({}, jwtSecret, {
+            algorithm: "HS256",
+            subject: String(userId),
+            issuer,
+            audience,
+            expiresIn: "15m",
+        });
+    function setRefreshCookie(res, userId) {
+        const token = jwt.sign({}, jwtSecret, {
+            algorithm: "HS256",
+            subject: String(userId),
+            issuer,
+            audience: refreshAudience,
+            expiresIn: refreshSeconds,
+        });
+        res.append(
+            "Set-Cookie",
+            `${refreshCookie}=${token}; ${cookieOptions(refreshSeconds)}`,
+        );
+    }
+    const clearRefreshCookie = (res) =>
+        res.append("Set-Cookie", `${refreshCookie}=; ${cookieOptions(0)}`);
+
     async function authenticate(req, res, next) {
         const match = /^Bearer ([^\s]+)$/i.exec(req.get("authorization") || "");
         if (!match) return unauthorized(res);
@@ -51,14 +104,7 @@ function createAuth({ getPrisma, jwtSecret }) {
                 audience,
                 maxAge: "15m",
             });
-            if (
-                !Number.isInteger(claims.exp) ||
-                typeof claims.sub !== "string" ||
-                !/^[1-9]\d*$/.test(claims.sub) ||
-                !Number.isSafeInteger(Number(claims.sub)) ||
-                Number(claims.sub) > 2147483647
-            )
-                return unauthorized(res);
+            if (!validSubject(claims)) return unauthorized(res);
         } catch {
             return unauthorized(res);
         }
@@ -140,20 +186,56 @@ function createAuth({ getPrisma, jwtSecret }) {
                 message: "Invalid email or password.",
             });
         }
-        const token = jwt.sign({}, jwtSecret, {
-            algorithm: "HS256",
-            subject: String(user.userId),
-            issuer,
-            audience,
-            expiresIn: "15m",
-        });
+        setRefreshCookie(res, user.userId);
         res.json({
             success: true,
-            token,
+            token: accessToken(user.userId),
             tokenType: "Bearer",
             expiresIn: 900,
             user: profile(user),
         });
+    });
+    // Restores a session after a page reload using the httpOnly refresh cookie.
+    // The cookie is not renewed, so sessions end at most 8 hours after login.
+    router.post("/refresh", async (req, res, next) => {
+        const token = readCookie(req, refreshCookie);
+        let claims;
+        try {
+            if (!token) throw Error("missing");
+            claims = jwt.verify(token, jwtSecret, {
+                algorithms: ["HS256"],
+                issuer,
+                audience: refreshAudience,
+                maxAge: refreshSeconds,
+            });
+            if (!validSubject(claims)) throw Error("invalid");
+        } catch {
+            if (token) clearRefreshCookie(res);
+            return unauthorized(res);
+        }
+        try {
+            const user = await getPrisma().user.findUnique({
+                where: { userId: Number(claims.sub) },
+                select: profileSelect,
+            });
+            if (!user?.isActive) {
+                clearRefreshCookie(res);
+                return unauthorized(res);
+            }
+            res.json({
+                success: true,
+                token: accessToken(user.userId),
+                tokenType: "Bearer",
+                expiresIn: 900,
+                user: profile(user),
+            });
+        } catch (error) {
+            next(error);
+        }
+    });
+    router.post("/logout", (req, res) => {
+        clearRefreshCookie(res);
+        res.json({ success: true });
     });
     router.get("/me", authenticate, (req, res) =>
         res.json({ success: true, user: req.user }),
